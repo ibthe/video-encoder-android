@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Video Encoder</string>
+    <string name="pick">Choose videos</string>
+    <string name="encode">Encode</string>
+    <string name="cancel">Cancel</string>
+    <string name="p_yt1080">YouTube 1080p</string>
+    <string name="p_yt4k">YouTube 4K</string>
+    <string name="p_vertical">Shorts / TikTok (vertical)</string>
+    <string name="p_small">Small size</string>
+    <string name="p_audio">Audio only (M4A)</string>
+    <string name="trial">Trial: %1$d of %2$d files left</string>
+    <string name="licensed">Licensed to %1$s</string>
+    <string name="licensed_play">Full version unlocked</string>
+    <string name="enter_key">Enter license key</string>
+    <string name="buy">Buy full version</string>
+    <string name="paste_key">Paste your license key</string>
+    <string name="activate">Activate</string>
+    <string name="bad_key">Invalid key</string>
+    <string name="queued">Queued</string>
+    <string name="ok">Done</string>
+    <string name="failed">Error</string>
+    <string name="file_of">File %1$d of %2$d</string>
+    <string name="done">Done: %1$d, failed: %2$d</string>
+    <string name="stopped">Stopped. Files done: %1$d</string>
+    <string name="locked">Trial ended. Please unlock the full version.</string>
+    <string name="empty">Choose one or more videos. Results are saved to Movies/Processed. Keep the screen on while encoding.</string>
+</resources>
