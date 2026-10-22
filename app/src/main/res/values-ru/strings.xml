@@ -27,4 +27,11 @@
     <string name="dev_hint">ID вашего устройства: %1$s\n\nОтправьте его продавцу при покупке. Ключ будет работать только на этом устройстве.</string>
     <string name="copy_id">Копировать ID</string>
     <string name="copied">Скопировано</string>
+    <string name="subtitle">Быстрый конвертер видео на устройстве</string>
+    <string name="section_format">Формат</string>
+    <string name="section_queue">Очередь</string>
+    <string name="running">Кодируется</string>
+    <string name="meta_video">%1$dp · %2$d Мбит/с · H.264</string>
+    <string name="meta_vertical">1080×1920 · %1$d Мбит/с · H.264</string>
+    <string name="meta_audio">M4A · AAC</string>
 </resources>

@@ -5,7 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.provider.Settings
 import android.util.Base64
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -52,11 +55,24 @@ class DirectLicensing(private val a: AppCompatActivity, private val refresh: () 
     override fun consumeTrial() = trial.consume()
 
     override fun onButton() {
-        val input = EditText(a).apply { hint = a.getString(R.string.paste_key); setSingleLine() }
+        val d = a.resources.displayMetrics.density
+        val input = EditText(a).apply {
+            hint = a.getString(R.string.paste_key); setSingleLine()
+            setTextColor(Color.WHITE); setHintTextColor(0x809A9AB0.toInt())
+            setPadding((16 * d).toInt(), (14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = 14 * d; setColor(0x14FFFFFF); setStroke((1 * d).toInt(), 0x26FFFFFF)
+            }
+        }
+        val holder = FrameLayout(a).apply {
+            setPadding((20 * d).toInt(), (8 * d).toInt(), (20 * d).toInt(), 0)
+            addView(input)
+        }
         val id = pretty(deviceCode())
         AlertDialog.Builder(a)
+            .setTitle(R.string.enter_key)
             .setMessage(a.getString(R.string.dev_hint, id))
-            .setView(input)
+            .setView(holder)
             .setPositiveButton(R.string.activate) { _, _ ->
                 val k = input.text.toString()
                 if (verify(k) != null) { prefs.edit().putString("key", k.trim()).apply(); refresh() }
