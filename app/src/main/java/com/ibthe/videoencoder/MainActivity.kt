@@ -29,6 +29,9 @@ import android.view.animation.OvershootInterpolator
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.BundleCompat
+import androidx.core.os.LocaleListCompat
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import androidx.core.view.ViewCompat
@@ -215,9 +218,32 @@ class MainActivity : AppCompatActivity() {
             addView(licDot, LinearLayout.LayoutParams(dp(7), dp(7)))
             addView(licText, lp(WRAP, WRAP, start = dp(10)))
         }
+        // переключатель языка EN / RU / CE
+        val curLang = resources.configuration.locales[0].language.let { if (it == "ru" || it == "ce") it else "en" }
+        val langBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+            background = shape(SURF, 16)
+            listOf("en" to "EN", "ru" to "RU", "ce" to "CE").forEach { (code, lab) ->
+                val sel = code == curLang
+                addView(tv(lab, 11f, if (sel) INK else MUTED, true).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(10), dp(6), dp(10), dp(6))
+                    background = if (sel) shape(LIME, 13) else null
+                    setOnClickListener {
+                        if (!busy && !sel) AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(code))
+                    }
+                })
+            }
+        }
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(title, LinearLayout.LayoutParams(0, WRAP, 1f))
+            addView(langBox)
+        }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(title)
+            addView(titleRow, LinearLayout.LayoutParams(MATCH, WRAP))
             addView(sub, lp(WRAP, WRAP, top = dp(2)))
             addView(licRow, lp(WRAP, WRAP, top = dp(12)))
             addView(licBtn, lp(WRAP, WRAP, top = dp(2)))
@@ -345,12 +371,34 @@ class MainActivity : AppCompatActivity() {
         cancelBtn.setOnClickListener { cancelAll() }
         refreshLic()
 
+        // восстановление выбора после смены языка / поворота
+        savedInstanceState?.let { b ->
+            try {
+                selectPreset(b.getInt("preset", 0).coerceIn(0, presets.size - 1))
+                BundleCompat.getParcelableArrayList(b, "files", Uri::class.java)?.let { saved ->
+                    if (saved.isNotEmpty()) {
+                        files.addAll(saved)
+                        saved.forEach { states[it] = S_QUEUED; names[it] = displayName(it) }
+                        renderList()
+                        setEnabledUi(encodeBtn, true)
+                        setHero(files.size.toString(), getString(R.string.selected_files))
+                    }
+                }
+            } catch (e: Exception) { files.clear(); states.clear(); names.clear() }
+        }
+
         // эффектное появление
         listOf<View>(header, hero, hint, presetLabel, presetScroll).forEachIndexed { i, v ->
             v.alpha = 0f; v.translationY = dp(18).toFloat()
             v.animate().alpha(1f).translationY(0f).setStartDelay(80L * i).setDuration(520)
                 .setInterpolator(DecelerateInterpolator(1.6f)).start()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt("preset", selectedPreset)
+        if (!busy) outState.putParcelableArrayList("files", ArrayList(files))
     }
 
     override fun onDestroy() {
