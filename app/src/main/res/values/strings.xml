@@ -27,7 +27,7 @@
     <string name="dev_hint">Your device ID: %1$s\n\nSend it to the seller when you buy. The key will work only on this device.</string>
     <string name="copy_id">Copy ID</string>
     <string name="copied">Copied</string>
-    <string name="subtitle">Fast on-device video converter</string>
+    <string name="subtitle">Fast on-device video re-encoding</string>
     <string name="section_format">Format</string>
     <string name="section_queue">Queue</string>
     <string name="running">Encoding</string>
