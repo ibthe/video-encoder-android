@@ -1,15 +1,12 @@
 package com.ibthe.videoencoder
 
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.content.ContentValues
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.RippleDrawable
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -20,15 +17,20 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.text.TextUtils
+import android.util.Size
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.text.buildSpannedString
+import androidx.core.text.color
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -39,20 +41,20 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
 import androidx.media3.transformer.*
 import java.io.File
+import java.util.concurrent.Executors
 
 data class Preset(val label: Int, val height: Int, val bitrate: Int, val crop: Boolean = false, val audio: Boolean = false)
 
-// ── Палитра ──────────────────────────────────────────────
-private val BG = 0xFF07070C.toInt()
-private val TEXT = 0xFFF4F4F8.toInt()
-private val MUTED = 0xFF9A9AB0.toInt()
-private val ACC1 = 0xFF7C5CFF.toInt()       // violet
-private val ACC2 = 0xFF22D3EE.toInt()       // cyan
-private val ACC_LIGHT = 0xFFA78BFA.toInt()
-private val GREEN = 0xFF34D399.toInt()
-private val RED = 0xFFFB7185.toInt()
-private const val CARD = 0x0FFFFFFF
-private const val CARD_STROKE = 0x1AFFFFFF
+// ── Палитра: чёрный + кислотный лайм ─────────────────────
+private val BG = 0xFF0A0A0A.toInt()
+private val SURF = 0xFF161616.toInt()
+private val SURF2 = 0xFF222222.toInt()
+private val TEXT = 0xFFF5F5F0.toInt()
+private val MUTED = 0xFF8A8A85.toInt()
+private val LIME = 0xFFD4FF3A.toInt()
+private val INK = 0xFF0A0A0A.toInt()
+private val INK_DIM = 0x99000000.toInt()
+private val RED = 0xFFFF5C5C.toInt()
 
 private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -71,26 +73,31 @@ class MainActivity : AppCompatActivity() {
         Preset(R.string.p_small, 720, 3_000_000),
         Preset(R.string.p_audio, 0, 0, audio = true)
     )
+    private val tokens = listOf("1080", "4K", "9:16", "720", "M4A")
+
     private lateinit var lic: Licensing
     private lateinit var licText: TextView
-    private lateinit var licBtn: Button
+    private lateinit var licBtn: TextView
     private lateinit var licDot: View
-    private lateinit var pickBtn: LinearLayout
+    private lateinit var hero: FrameLayout
+    private lateinit var ring: RingView
+    private lateinit var heroBig: TextView
+    private lateinit var heroSmall: TextView
     private lateinit var encodeBtn: Button
     private lateinit var cancelBtn: Button
     private lateinit var queueLabel: TextView
     private lateinit var queueBox: LinearLayout
-    private lateinit var statusView: TextView
-    private lateinit var progress: ProgressBar
     private lateinit var content: LinearLayout
     private lateinit var bottomBar: LinearLayout
-    private val presetRows = mutableListOf<LinearLayout>()
-    private val presetRadios = mutableListOf<TextView>()
-    private val glowAnims = mutableListOf<ObjectAnimator>()
+    private lateinit var presetScroll: HorizontalScrollView
+    private val presetCards = mutableListOf<LinearLayout>()
+    private val presetTexts = mutableListOf<List<TextView>>()
     private var selectedPreset = 0
     private var insetTop = 0
     private var insetBottom = 0
 
+    private val io = Executors.newSingleThreadExecutor()
+    private val thumbs = mutableMapOf<Uri, Bitmap>()
     private val files = mutableListOf<Uri>()
     private val states = mutableMapOf<Uri, Int>()
     private val names = mutableMapOf<Uri, String>()
@@ -106,81 +113,67 @@ class MainActivity : AppCompatActivity() {
 
     private val picker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty() && !busy) {
-            files.clear(); files.addAll(uris); states.clear(); names.clear()
+            files.clear(); files.addAll(uris); states.clear(); names.clear(); thumbs.clear()
             files.forEach { states[it] = S_QUEUED; names[it] = displayName(it) }
             renderList(animate = true)
             setEnabledUi(encodeBtn, true)
-            setStatus("")
+            ring.idle = true
+            setHero(files.size.toString(), getString(R.string.selected_files))
+            heroBig.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120).withEndAction {
+                heroBig.animate().scaleX(1f).scaleY(1f).setDuration(220).setInterpolator(OvershootInterpolator()).start()
+            }.start()
         }
     }
 
-    // ── UI helpers ───────────────────────────────────────
+    // ── helpers ──────────────────────────────────────────
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun shape(fill: Int, radius: Int, strokeW: Int = 0, stroke: Int = 0, dashed: Boolean = false) =
+    private fun shape(fill: Int, radius: Int, strokeW: Int = 0, stroke: Int = 0) =
         GradientDrawable().apply {
             cornerRadius = dp(radius).toFloat()
             setColor(fill)
-            if (strokeW > 0) {
-                if (dashed) setStroke(dp(strokeW), stroke, dp(6).toFloat(), dp(5).toFloat())
-                else setStroke(dp(strokeW), stroke)
-            }
-        }
-
-    private fun gradient(radius: Int) =
-        GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(ACC1, ACC2)).apply {
-            cornerRadius = dp(radius).toFloat()
+            if (strokeW > 0) setStroke(dp(strokeW), stroke)
         }
 
     private fun ripple(content: Drawable, radius: Int): Drawable =
         RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), content, shape(0xFFFFFFFF.toInt(), radius))
 
-    private fun glow(color: Int, sizeDp: Int) = GradientDrawable().apply {
-        setGradientType(GradientDrawable.RADIAL_GRADIENT)
-        setGradientRadius(dp(sizeDp / 2).toFloat())
-        setColors(intArrayOf(color, color and 0x00FFFFFF))
-    }
+    private fun tv(txt: CharSequence?, size: Float, color: Int, bold: Boolean = false, black: Boolean = false) =
+        TextView(this).apply {
+            text = txt; textSize = size; setTextColor(color)
+            if (black) typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+            else if (bold) setTypeface(typeface, Typeface.BOLD)
+        }
 
-    private fun tv(txt: CharSequence?, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-        text = txt; textSize = size; setTextColor(color)
-        if (bold) setTypeface(typeface, Typeface.BOLD)
-    }
+    private fun lp(w: Int, h: Int, top: Int = 0, start: Int = 0, end: Int = 0) =
+        LinearLayout.LayoutParams(w, h).apply { topMargin = top; marginStart = start; marginEnd = end }
 
-    private fun lp(w: Int, h: Int, top: Int = 0, start: Int = 0) =
-        LinearLayout.LayoutParams(w, h).apply { topMargin = top; marginStart = start }
+    /** Блок с боковыми полями 20dp */
+    private fun block(top: Int, h: Int = WRAP) = lp(MATCH, h, top = top, start = dp(20), end = dp(20))
 
-    private fun sectionLabel(text: String) = tv(text.uppercase(), 12f, MUTED, true).apply {
-        letterSpacing = 0.14f
-        setPadding(dp(4), 0, 0, 0)
-    }
+    private fun sectionLabel(text: String) = tv(text.uppercase(), 12f, MUTED, true).apply { letterSpacing = 0.16f }
 
     private fun setEnabledUi(v: View, enabled: Boolean) {
         v.isEnabled = enabled
-        v.alpha = if (enabled) 1f else 0.4f
+        v.alpha = if (enabled) 1f else 0.35f
     }
 
     private fun pressable(v: View) {
         v.setOnTouchListener { view, e ->
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(90).start()
+                MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(90).start()
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
-                    view.animate().scaleX(1f).scaleY(1f).setDuration(160).start()
+                    view.animate().scaleX(1f).scaleY(1f).setDuration(180).start()
             }
             false
         }
     }
 
-    private fun primaryButton(b: Button, text: String) = b.apply {
-        this.text = text; isAllCaps = false; textSize = 17f
-        setTypeface(typeface, Typeface.BOLD); setTextColor(Color.WHITE)
-        stateListAnimator = null; elevation = 0f
-        background = ripple(gradient(18), 18)
-        pressable(this)
-    }
+    private fun setHero(big: String, small: String) { heroBig.text = big; heroSmall.text = small }
 
-    private fun setStatus(s: String) {
-        statusView.text = s
-        statusView.visibility = if (s.isEmpty()) View.GONE else View.VISIBLE
+    private fun onProgress(p: Int) {
+        ring.setProgress(p / 100f, true)
+        heroBig.text = "$p%"
     }
 
     private fun meta(p: Preset) = when {
@@ -189,7 +182,7 @@ class MainActivity : AppCompatActivity() {
         else -> getString(R.string.meta_video, p.height, p.bitrate / 1_000_000)
     }
 
-    // ── Screen ───────────────────────────────────────────
+    // ── screen ───────────────────────────────────────────
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -197,27 +190,7 @@ class MainActivity : AppCompatActivity() {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
-
         val frame = FrameLayout(this).apply { setBackgroundColor(BG) }
-
-        // мягкие светящиеся пятна на фоне
-        val glowA = View(this).apply {
-            background = glow(0x557C5CFF, 520)
-            layoutParams = FrameLayout.LayoutParams(dp(520), dp(520), Gravity.TOP or Gravity.END)
-                .apply { topMargin = -dp(240); marginEnd = -dp(220) }
-        }
-        val glowB = View(this).apply {
-            background = glow(0x3322D3EE, 460)
-            layoutParams = FrameLayout.LayoutParams(dp(460), dp(460), Gravity.BOTTOM or Gravity.START)
-                .apply { bottomMargin = -dp(240); marginStart = -dp(220) }
-        }
-        frame.addView(glowA); frame.addView(glowB)
-        listOf(glowA to 5200L, glowB to 6400L).forEach { (v, d) ->
-            glowAnims.add(ObjectAnimator.ofFloat(v, View.ALPHA, 0.55f, 1f).apply {
-                duration = d; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start()
-            })
-        }
-
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply {
             isFillViewport = true; overScrollMode = View.OVER_SCROLL_NEVER
@@ -225,86 +198,76 @@ class MainActivity : AppCompatActivity() {
         }
         frame.addView(scroll, FrameLayout.LayoutParams(MATCH, MATCH))
 
-        // ── Header
-        val logo = TextView(this).apply {
-            text = "▶"; gravity = Gravity.CENTER; textSize = 18f; setTextColor(Color.WHITE)
-            background = gradient(15)
-        }
-        val titles = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(tv(getString(R.string.app_name), 26f, TEXT, true).apply { letterSpacing = -0.01f })
-            addView(tv(getString(R.string.subtitle), 13f, MUTED))
-        }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(logo, LinearLayout.LayoutParams(dp(48), dp(48)))
-            addView(titles, lp(WRAP, WRAP, start = dp(14)))
-        }
-
-        // ── License card
+        // ── Header: огромный заголовок + статус лицензии
+        val ver = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "" } catch (e: Exception) { "" }
+        val title = tv(buildSpannedString {
+            append(getString(R.string.app_name)); color(LIME) { append(".") }
+        }, 38f, TEXT, black = true).apply { letterSpacing = -0.03f }
+        val sub = tv("${getString(R.string.subtitle)}  ·  v$ver", 13f, MUTED)
         licDot = View(this)
         licText = tv("", 14f, TEXT, true)
-        licBtn = Button(this).apply {
-            isAllCaps = false; textSize = 14f; setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ACC_LIGHT); stateListAnimator = null; elevation = 0f
-            background = ripple(shape(0x267C5CFF, 14, 1, 0x557C5CFF), 14)
-            pressable(this)
+        licBtn = tv("", 14f, LIME, true).apply {
+            setPadding(0, dp(8), dp(16), dp(8)); isClickable = true; isFocusable = true
         }
         val licRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             addView(licDot, LinearLayout.LayoutParams(dp(8), dp(8)))
             addView(licText, lp(WRAP, WRAP, start = dp(10)))
         }
-        val licCard = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(16), dp(18), dp(16))
-            background = shape(CARD, 20, 1, CARD_STROKE)
-            addView(licRow)
-            addView(licBtn, lp(MATCH, dp(46), top = dp(12)))
+            addView(title)
+            addView(sub, lp(WRAP, WRAP, top = dp(2)))
+            addView(licRow, lp(WRAP, WRAP, top = dp(18)))
+            addView(licBtn, lp(WRAP, WRAP, top = dp(2)))
         }
 
-        // ── Pick zone
-        pickBtn = LinearLayout(this).apply {
+        // ── Hero: кольцо + крупная цифра
+        ring = RingView(this)
+        heroBig = tv("+", 68f, LIME, black = true).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+        heroSmall = tv(getString(R.string.pick), 14f, MUTED).apply {
+            gravity = Gravity.CENTER; setLineSpacing(0f, 1.1f)
+        }
+        val heroCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setPadding(dp(22), dp(28), dp(22), dp(26))
+            addView(heroBig, LinearLayout.LayoutParams(WRAP, WRAP))
+            addView(heroSmall, lp(MATCH, WRAP, top = dp(6)))
+        }
+        hero = FrameLayout(this).apply {
+            background = ripple(shape(SURF, 40), 40)
             isClickable = true; isFocusable = true
-            background = ripple(shape(0x0DFFFFFF, 26, 2, 0x55A78BFA, dashed = true), 26)
-            val plus = TextView(this@MainActivity).apply {
-                text = "+"; gravity = Gravity.CENTER; textSize = 30f; setTextColor(Color.WHITE)
-                background = gradient(30)
-            }
-            addView(plus, LinearLayout.LayoutParams(dp(60), dp(60)))
-            addView(tv(getString(R.string.pick), 18f, TEXT, true), lp(WRAP, WRAP, top = dp(14)))
-            addView(tv(getString(R.string.empty), 13f, MUTED).apply {
-                gravity = Gravity.CENTER; setLineSpacing(0f, 1.15f)
-            }, lp(MATCH, WRAP, top = dp(6)))
+            addView(ring, FrameLayout.LayoutParams(dp(260), dp(260), Gravity.CENTER))
+            addView(heroCol, FrameLayout.LayoutParams(dp(170), WRAP, Gravity.CENTER))
             pressable(this)
         }
+        val hint = tv(getString(R.string.empty), 13f, MUTED).apply { gravity = Gravity.CENTER; setLineSpacing(0f, 1.15f) }
 
-        // ── Presets
+        // ── Presets: горизонтальная карусель крупных карточек
         val presetLabel = sectionLabel(getString(R.string.section_format))
-        val presetsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val cardRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         presets.forEachIndexed { i, p ->
-            val radio = TextView(this).apply {
-                gravity = Gravity.CENTER; textSize = 12f; setTextColor(Color.WHITE)
-                setTypeface(typeface, Typeface.BOLD)
-            }
-            val col = LinearLayout(this).apply {
+            val token = tv(tokens[i], 34f, TEXT, black = true).apply { letterSpacing = -0.02f; includeFontPadding = false }
+            val spacer = View(this)
+            val label = tv(getString(p.label), 13f, TEXT, true).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
+            val m = tv(meta(p), 11f, MUTED).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+            val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(tv(getString(p.label), 15f, TEXT, true))
-                addView(tv(meta(p), 12f, MUTED), lp(WRAP, WRAP, top = dp(2)))
-            }
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(14), dp(16), dp(14))
+                setPadding(dp(16), dp(18), dp(16), dp(16))
                 isClickable = true; isFocusable = true
                 setOnClickListener { if (!busy) selectPreset(i) }
-                addView(radio, LinearLayout.LayoutParams(dp(24), dp(24)))
-                addView(col, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(14) })
+                addView(token)
+                addView(spacer, LinearLayout.LayoutParams(1, 0, 1f))
+                addView(label)
+                addView(m, lp(WRAP, WRAP, top = dp(4)))
                 pressable(this)
             }
-            presetRows.add(row); presetRadios.add(radio)
-            presetsBox.addView(row, lp(MATCH, WRAP, top = if (i == 0) 0 else dp(8)))
+            presetCards.add(card); presetTexts.add(listOf(token, label, m))
+            cardRow.addView(card, lp(dp(152), dp(180), start = if (i == 0) 0 else dp(10)))
+        }
+        presetScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false; setPadding(dp(20), 0, dp(20), 0)
+            addView(cardRow)
         }
         selectPreset(0)
 
@@ -312,49 +275,44 @@ class MainActivity : AppCompatActivity() {
         queueLabel = sectionLabel(getString(R.string.section_queue)).apply { visibility = View.GONE }
         queueBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
-        content.addView(header)
-        content.addView(licCard, lp(MATCH, WRAP, top = dp(22)))
-        content.addView(pickBtn, lp(MATCH, WRAP, top = dp(14)))
-        content.addView(presetLabel, lp(MATCH, WRAP, top = dp(26)))
-        content.addView(presetsBox, lp(MATCH, WRAP, top = dp(10)))
-        content.addView(queueLabel, lp(MATCH, WRAP, top = dp(26)))
-        content.addView(queueBox, lp(MATCH, WRAP, top = dp(10)))
+        content.addView(header, block(0))
+        content.addView(hero, block(dp(24), dp(340)))
+        content.addView(hint, block(dp(14)))
+        content.addView(presetLabel, block(dp(30)))
+        content.addView(presetScroll, lp(MATCH, WRAP, top = dp(12)))
+        content.addView(queueLabel, block(dp(30)))
+        content.addView(queueBox, block(dp(12)))
 
-        // ── Bottom bar (CTA)
-        statusView = tv("", 13f, MUTED).apply { gravity = Gravity.CENTER; visibility = View.GONE }
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100; visibility = View.INVISIBLE
-            val track = shape(0x1FFFFFFF, 6)
-            val bar = ClipDrawable(gradient(6), Gravity.START, ClipDrawable.HORIZONTAL)
-            progressDrawable = LayerDrawable(arrayOf<Drawable>(track, bar)).apply {
-                setId(0, android.R.id.background); setId(1, android.R.id.progress)
-            }
+        // ── Bottom CTA
+        encodeBtn = Button(this).apply {
+            text = getString(R.string.encode); isAllCaps = false; textSize = 18f
+            setTypeface(typeface, Typeface.BOLD); setTextColor(INK)
+            stateListAnimator = null; elevation = 0f
+            background = ripple(shape(LIME, 32), 32)
+            pressable(this)
         }
-        encodeBtn = primaryButton(Button(this), getString(R.string.encode))
         setEnabledUi(encodeBtn, false)
         cancelBtn = Button(this).apply {
-            text = getString(R.string.cancel); isAllCaps = false; textSize = 16f
+            text = getString(R.string.cancel); isAllCaps = false; textSize = 17f
             setTypeface(typeface, Typeface.BOLD); setTextColor(RED)
             stateListAnimator = null; elevation = 0f; visibility = View.GONE
-            background = ripple(shape(0x1AFB7185, 18, 1, 0x66FB7185), 18)
+            background = ripple(shape(SURF2, 32), 32)
             pressable(this)
         }
         bottomBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0x0007070C, 0xE607070C.toInt(), 0xFF07070C.toInt())
+                intArrayOf(0x000A0A0A, 0xE60A0A0A.toInt(), 0xFF0A0A0A.toInt())
             )
-            addView(statusView, lp(MATCH, WRAP))
-            addView(progress, lp(MATCH, dp(6), top = dp(8)))
-            addView(encodeBtn, lp(MATCH, dp(56), top = dp(14)))
-            addView(cancelBtn, lp(MATCH, dp(56), top = dp(14)))
+            addView(encodeBtn, lp(MATCH, dp(64)))
+            addView(cancelBtn, lp(MATCH, dp(64)))
         }
         frame.addView(bottomBar, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM))
 
         fun applyPadding(barH: Int) {
-            content.setPadding(dp(20), insetTop + dp(16), dp(20), barH + dp(12))
-            bottomBar.setPadding(dp(20), dp(36), dp(20), insetBottom + dp(14))
+            content.setPadding(0, insetTop + dp(24), 0, barH + dp(12))
+            bottomBar.setPadding(dp(20), dp(40), dp(20), insetBottom + dp(14))
         }
         ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
             val s = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -371,46 +329,42 @@ class MainActivity : AppCompatActivity() {
 
         lic = createLicensing(this) { refreshLic() }
         licBtn.setOnClickListener { lic.onButton() }
-        pickBtn.setOnClickListener { picker.launch(arrayOf("video/*")) }
+        hero.setOnClickListener { if (!busy) picker.launch(arrayOf("video/*")) }
         encodeBtn.setOnClickListener { runQueue() }
         cancelBtn.setOnClickListener { cancelAll() }
         refreshLic()
 
-        // плавное появление секций
-        listOf<View>(header, licCard, pickBtn, presetLabel, presetsBox).forEachIndexed { i, v ->
-            v.alpha = 0f; v.translationY = dp(18).toFloat()
-            v.animate().alpha(1f).translationY(0f).setStartDelay(70L * i).setDuration(480)
-                .setInterpolator(DecelerateInterpolator()).start()
+        // эффектное появление
+        listOf<View>(header, hero, hint, presetLabel, presetScroll).forEachIndexed { i, v ->
+            v.alpha = 0f; v.translationY = dp(26).toFloat()
+            v.animate().alpha(1f).translationY(0f).setStartDelay(80L * i).setDuration(520)
+                .setInterpolator(DecelerateInterpolator(1.6f)).start()
         }
     }
 
     override fun onDestroy() {
-        glowAnims.forEach { it.cancel() }
+        io.shutdownNow()
         super.onDestroy()
     }
 
     private fun selectPreset(i: Int) {
         selectedPreset = i
-        presetRows.forEachIndexed { j, r ->
+        presetCards.forEachIndexed { j, c ->
             val sel = j == i
-            r.background = ripple(
-                if (sel) shape(0x1F7C5CFF, 18, 1, 0x667C5CFF) else shape(CARD, 18, 1, CARD_STROKE), 18
-            )
-            val rd = presetRadios[j]
-            rd.text = if (sel) "✓" else ""
-            rd.background = if (sel)
-                GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(ACC1, ACC2))
-                    .apply { setShape(GradientDrawable.OVAL) }
-            else GradientDrawable().apply { setShape(GradientDrawable.OVAL); setStroke(dp(2), 0x40FFFFFF) }
+            c.background = ripple(shape(if (sel) LIME else SURF, 30), 30)
+            val (tk, lb, mt) = presetTexts[j]
+            tk.setTextColor(if (sel) INK else TEXT)
+            lb.setTextColor(if (sel) INK else TEXT)
+            mt.setTextColor(if (sel) INK_DIM else MUTED)
         }
     }
 
     private fun refreshLic() {
         licText.text = lic.label()
-        licBtn.text = lic.buttonText()
+        licBtn.text = lic.buttonText() + "  →"
         licBtn.visibility = if (lic.isLicensed()) View.GONE else View.VISIBLE
         licDot.background = GradientDrawable().apply {
-            setShape(GradientDrawable.OVAL); setColor(if (lic.isLicensed()) GREEN else ACC_LIGHT)
+            setShape(GradientDrawable.OVAL); setColor(if (lic.isLicensed()) LIME else MUTED)
         }
     }
 
@@ -423,31 +377,49 @@ class MainActivity : AppCompatActivity() {
         }
     )
 
+    private fun loadThumb(u: Uri, iv: ImageView) {
+        thumbs[u]?.let { iv.setImageBitmap(it); return }
+        io.execute {
+            val bmp: Bitmap? = try {
+                contentResolver.loadThumbnail(u, Size(200, 200), null)
+            } catch (e: Exception) {
+                try {
+                    val r = MediaMetadataRetriever()
+                    try { r.setDataSource(this, u); r.getFrameAtTime(0) } finally { r.release() }
+                } catch (e2: Exception) { null }
+            }
+            if (bmp != null) runOnUiThread { thumbs[u] = bmp; iv.setImageBitmap(bmp) }
+        }
+    }
+
     private fun fileRow(u: Uri): View {
         val st = states[u] ?: S_QUEUED
         val (fg, bg) = when (st) {
-            S_RUN -> ACC_LIGHT to 0x267C5CFF
-            S_OK -> GREEN to 0x2634D399
-            S_FAIL -> RED to 0x26FB7185
+            S_RUN -> INK to LIME
+            S_OK -> LIME to 0x26D4FF3A
+            S_FAIL -> RED to 0x26FF5C5C
             else -> MUTED to 0x1AFFFFFF
         }
-        val icon = TextView(this).apply {
-            text = "▶"; gravity = Gravity.CENTER; textSize = 11f; setTextColor(MUTED)
-            background = shape(0x14FFFFFF, 11)
+        val thumb = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = shape(SURF2, 18); clipToOutline = true; outlineProvider = ViewOutlineProvider.BACKGROUND
         }
-        val name = tv(names[u] ?: "video", 14f, TEXT).apply {
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        loadThumb(u, thumb)
+        val name = tv(names[u] ?: "video", 14f, TEXT, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+        val pill = tv(statusText(st), 11f, fg, true).apply {
+            setPadding(dp(10), dp(3), dp(10), dp(3)); background = shape(bg, 20)
         }
-        val pill = tv(statusText(st), 12f, fg, true).apply {
-            setPadding(dp(10), dp(4), dp(10), dp(4)); background = shape(bg, 20)
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(name)
+            addView(pill, lp(WRAP, WRAP, top = dp(6)))
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = shape(CARD, 16, 1, CARD_STROKE)
-            addView(icon, LinearLayout.LayoutParams(dp(34), dp(34)))
-            addView(name, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(12); marginEnd = dp(10) })
-            addView(pill)
+            setPadding(dp(10), dp(10), dp(14), dp(10))
+            background = shape(if (st == S_RUN) SURF2 else SURF, 26)
+            addView(thumb, LinearLayout.LayoutParams(dp(60), dp(60)))
+            addView(col, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(14) })
         }
     }
 
@@ -459,8 +431,8 @@ class MainActivity : AppCompatActivity() {
             val row = fileRow(u)
             queueBox.addView(row, lp(MATCH, WRAP, top = if (i == 0) 0 else dp(8)))
             if (animate && i < 12) {
-                row.alpha = 0f; row.translationY = dp(12).toFloat()
-                row.animate().alpha(1f).translationY(0f).setStartDelay(40L * i).setDuration(320)
+                row.alpha = 0f; row.translationY = dp(16).toFloat()
+                row.animate().alpha(1f).translationY(0f).setStartDelay(50L * i).setDuration(360)
                     .setInterpolator(DecelerateInterpolator()).start()
             }
         }
@@ -472,16 +444,15 @@ class MainActivity : AppCompatActivity() {
         } ?: "video"
 
     private fun setBusyUi(b: Boolean) {
-        pickBtn.isEnabled = !b; pickBtn.alpha = if (b) 0.45f else 1f
-        presetRows.forEach { it.alpha = if (b) 0.45f else 1f }
+        presetScroll.alpha = if (b) 0.35f else 1f
         encodeBtn.visibility = if (b) View.GONE else View.VISIBLE
         cancelBtn.visibility = if (b) View.VISIBLE else View.GONE
-        progress.visibility = if (b) View.VISIBLE else View.INVISIBLE
     }
 
     private fun runQueue() {
         busy = true; cancelled = false; lockedHit = false; okCount = 0; failCount = 0
         setBusyUi(true)
+        ring.idle = false; ring.setProgress(0f, false)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val jobs = files.toList()
         val preset = presets[selectedPreset]
@@ -489,8 +460,8 @@ class MainActivity : AppCompatActivity() {
             if (cancelled) return
             if (i >= jobs.size) { finishQueue(); return }
             if (!lic.isLicensed() && lic.trialLeft() <= 0) { lockedHit = true; finishQueue(); return }
-            setStatus(getString(R.string.file_of, i + 1, jobs.size))
-            progress.progress = 0
+            ring.setProgress(0f, false)
+            setHero("0%", getString(R.string.file_of, i + 1, jobs.size))
             states[jobs[i]] = S_RUN; renderList()
             encodeOne(jobs[i], preset) { success ->
                 states[jobs[i]] = if (success) S_OK else S_FAIL
@@ -508,14 +479,20 @@ class MainActivity : AppCompatActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         states.keys.toList().forEach { if (states[it] == S_RUN) states[it] = S_QUEUED }
         renderList()
-        setBusyUi(false); progress.progress = 0
-        setStatus(
-            when {
-                lockedHit -> getString(R.string.locked)
-                cancelled -> getString(R.string.stopped, okCount)
-                else -> getString(R.string.done, okCount, failCount)
-            }
-        )
+        setBusyUi(false)
+        val msg = when {
+            lockedHit -> getString(R.string.locked)
+            cancelled -> getString(R.string.stopped, okCount)
+            else -> getString(R.string.done, okCount, failCount)
+        }
+        val big = when {
+            lockedHit -> "!"
+            cancelled -> files.size.toString()
+            okCount > 0 -> "✓"
+            else -> "!"
+        }
+        if (!lockedHit && !cancelled && okCount > 0) ring.setProgress(1f, true) else ring.idle = true
+        setHero(big, msg)
     }
 
     private fun cancelAll() {
@@ -576,7 +553,7 @@ class MainActivity : AppCompatActivity() {
         val holder = ProgressHolder()
         val r = object : Runnable {
             override fun run() {
-                if (t.getProgress(holder) != Transformer.PROGRESS_STATE_NOT_STARTED) progress.setProgress(holder.progress, true)
+                if (t.getProgress(holder) != Transformer.PROGRESS_STATE_NOT_STARTED) onProgress(holder.progress)
                 handler.postDelayed(this, 500)
             }
         }

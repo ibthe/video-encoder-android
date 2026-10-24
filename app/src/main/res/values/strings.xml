@@ -34,4 +34,5 @@
     <string name="meta_video">%1$dp · %2$d Mbps · H.264</string>
     <string name="meta_vertical">1080×1920 · %1$d Mbps · H.264</string>
     <string name="meta_audio">M4A · AAC</string>
+    <string name="selected_files">Files selected\nTap to change</string>
 </resources>
