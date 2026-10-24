@@ -35,4 +35,5 @@
     <string name="meta_vertical">1080×1920 · %1$d Мбит/с · H.264</string>
     <string name="meta_audio">M4A · AAC</string>
     <string name="selected_files">Файлов выбрано\nНажмите, чтобы изменить</string>
+    <string name="clear_all">Очистить</string>
 </resources>

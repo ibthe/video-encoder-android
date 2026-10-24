@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var encodeBtn: Button
     private lateinit var cancelBtn: Button
     private lateinit var queueLabel: TextView
+    private lateinit var queueHeader: LinearLayout
     private lateinit var queueBox: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var bottomBar: LinearLayout
@@ -149,9 +150,9 @@ class MainActivity : AppCompatActivity() {
         LinearLayout.LayoutParams(w, h).apply { topMargin = top; marginStart = start; marginEnd = end }
 
     /** Блок с боковыми полями 20dp */
-    private fun block(top: Int, h: Int = WRAP) = lp(MATCH, h, top = top, start = dp(20), end = dp(20))
+    private fun block(top: Int, h: Int = WRAP) = lp(MATCH, h, top = top, start = dp(16), end = dp(16))
 
-    private fun sectionLabel(text: String) = tv(text.uppercase(), 12f, MUTED, true).apply { letterSpacing = 0.16f }
+    private fun sectionLabel(text: String) = tv(text.uppercase(), 11f, MUTED, true).apply { letterSpacing = 0.14f }
 
     private fun setEnabledUi(v: View, enabled: Boolean) {
         v.isEnabled = enabled
@@ -202,101 +203,111 @@ class MainActivity : AppCompatActivity() {
         val ver = try { packageManager.getPackageInfo(packageName, 0).versionName ?: "" } catch (e: Exception) { "" }
         val title = tv(buildSpannedString {
             append(getString(R.string.app_name)); color(LIME) { append(".") }
-        }, 38f, TEXT, black = true).apply { letterSpacing = -0.03f }
-        val sub = tv("${getString(R.string.subtitle)}  ·  v$ver", 13f, MUTED)
+        }, 26f, TEXT, black = true).apply { letterSpacing = -0.03f }
+        val sub = tv("${getString(R.string.subtitle)}  ·  v$ver", 12f, MUTED)
         licDot = View(this)
-        licText = tv("", 14f, TEXT, true)
-        licBtn = tv("", 14f, LIME, true).apply {
-            setPadding(0, dp(8), dp(16), dp(8)); isClickable = true; isFocusable = true
+        licText = tv("", 13f, TEXT, true)
+        licBtn = tv("", 13f, LIME, true).apply {
+            setPadding(0, dp(6), dp(16), dp(6)); isClickable = true; isFocusable = true
         }
         val licRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            addView(licDot, LinearLayout.LayoutParams(dp(8), dp(8)))
+            addView(licDot, LinearLayout.LayoutParams(dp(7), dp(7)))
             addView(licText, lp(WRAP, WRAP, start = dp(10)))
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(title)
             addView(sub, lp(WRAP, WRAP, top = dp(2)))
-            addView(licRow, lp(WRAP, WRAP, top = dp(18)))
+            addView(licRow, lp(WRAP, WRAP, top = dp(12)))
             addView(licBtn, lp(WRAP, WRAP, top = dp(2)))
         }
 
         // ── Hero: кольцо + крупная цифра
         ring = RingView(this)
-        heroBig = tv("+", 68f, LIME, black = true).apply { gravity = Gravity.CENTER; includeFontPadding = false }
-        heroSmall = tv(getString(R.string.pick), 14f, MUTED).apply {
+        heroBig = tv("+", 40f, LIME, black = true).apply { gravity = Gravity.CENTER; includeFontPadding = false }
+        heroSmall = tv(getString(R.string.pick), 12f, MUTED).apply {
             gravity = Gravity.CENTER; setLineSpacing(0f, 1.1f)
         }
         val heroCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             addView(heroBig, LinearLayout.LayoutParams(WRAP, WRAP))
-            addView(heroSmall, lp(MATCH, WRAP, top = dp(6)))
+            addView(heroSmall, lp(MATCH, WRAP, top = dp(4)))
         }
         hero = FrameLayout(this).apply {
-            background = ripple(shape(SURF, 40), 40)
+            background = ripple(shape(SURF, 28), 28)
             isClickable = true; isFocusable = true
-            addView(ring, FrameLayout.LayoutParams(dp(260), dp(260), Gravity.CENTER))
-            addView(heroCol, FrameLayout.LayoutParams(dp(170), WRAP, Gravity.CENTER))
+            addView(ring, FrameLayout.LayoutParams(dp(170), dp(170), Gravity.CENTER))
+            addView(heroCol, FrameLayout.LayoutParams(dp(110), WRAP, Gravity.CENTER))
             pressable(this)
         }
-        val hint = tv(getString(R.string.empty), 13f, MUTED).apply { gravity = Gravity.CENTER; setLineSpacing(0f, 1.15f) }
+        val hint = tv(getString(R.string.empty), 11f, MUTED).apply { gravity = Gravity.CENTER; setLineSpacing(0f, 1.15f) }
 
         // ── Presets: горизонтальная карусель крупных карточек
         val presetLabel = sectionLabel(getString(R.string.section_format))
         val cardRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         presets.forEachIndexed { i, p ->
-            val token = tv(tokens[i], 34f, TEXT, black = true).apply { letterSpacing = -0.02f; includeFontPadding = false }
+            val token = tv(tokens[i], 22f, TEXT, black = true).apply { letterSpacing = -0.02f; includeFontPadding = false }
             val spacer = View(this)
-            val label = tv(getString(p.label), 13f, TEXT, true).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
-            val m = tv(meta(p), 11f, MUTED).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+            val label = tv(getString(p.label), 12f, TEXT, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+            val m = tv(meta(p), 10f, MUTED).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(18), dp(16), dp(16))
+                setPadding(dp(12), dp(12), dp(12), dp(12))
                 isClickable = true; isFocusable = true
                 setOnClickListener { if (!busy) selectPreset(i) }
                 addView(token)
                 addView(spacer, LinearLayout.LayoutParams(1, 0, 1f))
                 addView(label)
-                addView(m, lp(WRAP, WRAP, top = dp(4)))
+                addView(m, lp(WRAP, WRAP, top = dp(2)))
                 pressable(this)
             }
             presetCards.add(card); presetTexts.add(listOf(token, label, m))
-            cardRow.addView(card, lp(dp(152), dp(180), start = if (i == 0) 0 else dp(10)))
+            cardRow.addView(card, lp(dp(118), dp(116), start = if (i == 0) 0 else dp(8)))
         }
         presetScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false; setPadding(dp(20), 0, dp(20), 0)
+            clipToPadding = false; setPadding(dp(16), 0, dp(16), 0)
             addView(cardRow)
         }
         selectPreset(0)
 
         // ── Queue
-        queueLabel = sectionLabel(getString(R.string.section_queue)).apply { visibility = View.GONE }
+        queueLabel = sectionLabel(getString(R.string.section_queue))
+        val clearBtn = tv(getString(R.string.clear_all), 12f, LIME, true).apply {
+            setPadding(dp(12), dp(8), dp(4), dp(8)); isClickable = true; isFocusable = true
+            setOnClickListener { if (!busy) { clearAll() } }
+        }
+        queueHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            addView(queueLabel, LinearLayout.LayoutParams(0, WRAP, 1f))
+            addView(clearBtn)
+        }
         queueBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
         content.addView(header, block(0))
-        content.addView(hero, block(dp(24), dp(340)))
-        content.addView(hint, block(dp(14)))
-        content.addView(presetLabel, block(dp(30)))
-        content.addView(presetScroll, lp(MATCH, WRAP, top = dp(12)))
-        content.addView(queueLabel, block(dp(30)))
-        content.addView(queueBox, block(dp(12)))
+        content.addView(hero, block(dp(16), dp(210)))
+        content.addView(hint, block(dp(10)))
+        content.addView(presetLabel, block(dp(22)))
+        content.addView(presetScroll, lp(MATCH, WRAP, top = dp(8)))
+        content.addView(queueHeader, block(dp(14)))
+        content.addView(queueBox, block(dp(6)))
 
         // ── Bottom CTA
         encodeBtn = Button(this).apply {
-            text = getString(R.string.encode); isAllCaps = false; textSize = 18f
+            text = getString(R.string.encode); isAllCaps = false; textSize = 15f
             setTypeface(typeface, Typeface.BOLD); setTextColor(INK)
             stateListAnimator = null; elevation = 0f
-            background = ripple(shape(LIME, 32), 32)
+            background = ripple(shape(LIME, 26), 26)
             pressable(this)
         }
         setEnabledUi(encodeBtn, false)
         cancelBtn = Button(this).apply {
-            text = getString(R.string.cancel); isAllCaps = false; textSize = 17f
+            text = getString(R.string.cancel); isAllCaps = false; textSize = 15f
             setTypeface(typeface, Typeface.BOLD); setTextColor(RED)
             stateListAnimator = null; elevation = 0f; visibility = View.GONE
-            background = ripple(shape(SURF2, 32), 32)
+            background = ripple(shape(SURF2, 26), 26)
             pressable(this)
         }
         bottomBar = LinearLayout(this).apply {
@@ -305,14 +316,14 @@ class MainActivity : AppCompatActivity() {
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(0x000A0A0A, 0xE60A0A0A.toInt(), 0xFF0A0A0A.toInt())
             )
-            addView(encodeBtn, lp(MATCH, dp(64)))
-            addView(cancelBtn, lp(MATCH, dp(64)))
+            addView(encodeBtn, lp(MATCH, dp(52)))
+            addView(cancelBtn, lp(MATCH, dp(52)))
         }
         frame.addView(bottomBar, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM))
 
         fun applyPadding(barH: Int) {
-            content.setPadding(0, insetTop + dp(24), 0, barH + dp(12))
-            bottomBar.setPadding(dp(20), dp(40), dp(20), insetBottom + dp(14))
+            content.setPadding(0, insetTop + dp(16), 0, barH + dp(8))
+            bottomBar.setPadding(dp(16), dp(28), dp(16), insetBottom + dp(10))
         }
         ViewCompat.setOnApplyWindowInsetsListener(frame) { _, insets ->
             val s = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -322,9 +333,9 @@ class MainActivity : AppCompatActivity() {
         }
         bottomBar.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
             val h = bottom - top
-            if (content.paddingBottom != h + dp(12)) applyPadding(h)
+            if (content.paddingBottom != h + dp(8)) applyPadding(h)
         }
-        applyPadding(dp(120))
+        applyPadding(dp(90))
         setContentView(frame)
 
         lic = createLicensing(this) { refreshLic() }
@@ -336,7 +347,7 @@ class MainActivity : AppCompatActivity() {
 
         // эффектное появление
         listOf<View>(header, hero, hint, presetLabel, presetScroll).forEachIndexed { i, v ->
-            v.alpha = 0f; v.translationY = dp(26).toFloat()
+            v.alpha = 0f; v.translationY = dp(18).toFloat()
             v.animate().alpha(1f).translationY(0f).setStartDelay(80L * i).setDuration(520)
                 .setInterpolator(DecelerateInterpolator(1.6f)).start()
         }
@@ -351,7 +362,7 @@ class MainActivity : AppCompatActivity() {
         selectedPreset = i
         presetCards.forEachIndexed { j, c ->
             val sel = j == i
-            c.background = ripple(shape(if (sel) LIME else SURF, 30), 30)
+            c.background = ripple(shape(if (sel) LIME else SURF, 20), 20)
             val (tk, lb, mt) = presetTexts[j]
             tk.setTextColor(if (sel) INK else TEXT)
             lb.setTextColor(if (sel) INK else TEXT)
@@ -402,39 +413,68 @@ class MainActivity : AppCompatActivity() {
         }
         val thumb = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = shape(SURF2, 18); clipToOutline = true; outlineProvider = ViewOutlineProvider.BACKGROUND
+            background = shape(SURF2, 12); clipToOutline = true; outlineProvider = ViewOutlineProvider.BACKGROUND
         }
         loadThumb(u, thumb)
-        val name = tv(names[u] ?: "video", 14f, TEXT, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
-        val pill = tv(statusText(st), 11f, fg, true).apply {
-            setPadding(dp(10), dp(3), dp(10), dp(3)); background = shape(bg, 20)
+        val name = tv(names[u] ?: "video", 13f, TEXT, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        val pill = tv(statusText(st), 10f, fg, true).apply {
+            setPadding(dp(8), dp(2), dp(8), dp(2)); background = shape(bg, 20)
         }
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(name)
-            addView(pill, lp(WRAP, WRAP, top = dp(6)))
+            addView(pill, lp(WRAP, WRAP, top = dp(4)))
+        }
+        val remove = TextView(this).apply {
+            text = "✕"; textSize = 13f; setTextColor(MUTED); gravity = Gravity.CENTER
+            background = ripple(shape(0x14FFFFFF, 18), 18)
+            isClickable = true; isFocusable = true
+            setOnClickListener { if (!busy) removeFile(u) }
+            visibility = if (busy) View.GONE else View.VISIBLE
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(14), dp(10))
-            background = shape(if (st == S_RUN) SURF2 else SURF, 26)
-            addView(thumb, LinearLayout.LayoutParams(dp(60), dp(60)))
-            addView(col, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(14) })
+            setPadding(dp(8), dp(8), dp(10), dp(8))
+            background = shape(if (st == S_RUN) SURF2 else SURF, 18)
+            addView(thumb, LinearLayout.LayoutParams(dp(44), dp(44)))
+            addView(col, LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(12) })
+            addView(remove, LinearLayout.LayoutParams(dp(36), dp(36)))
         }
     }
 
     private fun renderList(animate: Boolean = false) {
         queueBox.removeAllViews()
-        queueLabel.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
+        queueHeader.visibility = if (files.isEmpty()) View.GONE else View.VISIBLE
         queueLabel.text = "${getString(R.string.section_queue).uppercase()}  ·  ${files.size}"
         files.forEachIndexed { i, u ->
             val row = fileRow(u)
-            queueBox.addView(row, lp(MATCH, WRAP, top = if (i == 0) 0 else dp(8)))
+            queueBox.addView(row, lp(MATCH, WRAP, top = if (i == 0) 0 else dp(6)))
             if (animate && i < 12) {
-                row.alpha = 0f; row.translationY = dp(16).toFloat()
+                row.alpha = 0f; row.translationY = dp(12).toFloat()
                 row.animate().alpha(1f).translationY(0f).setStartDelay(50L * i).setDuration(360)
                     .setInterpolator(DecelerateInterpolator()).start()
             }
+        }
+    }
+
+    private fun removeFile(u: Uri) {
+        files.remove(u); states.remove(u); names.remove(u); thumbs.remove(u)
+        onFilesChanged()
+    }
+
+    private fun clearAll() {
+        files.clear(); states.clear(); names.clear(); thumbs.clear()
+        onFilesChanged()
+    }
+
+    private fun onFilesChanged() {
+        renderList()
+        ring.idle = true
+        if (files.isEmpty()) {
+            setEnabledUi(encodeBtn, false)
+            setHero("+", getString(R.string.pick))
+        } else {
+            setHero(files.size.toString(), getString(R.string.selected_files))
         }
     }
 

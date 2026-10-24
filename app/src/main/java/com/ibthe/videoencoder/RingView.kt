@@ -13,7 +13,7 @@ import android.view.animation.LinearInterpolator
 /** Круговой индикатор: в ожидании — вращающиеся точки, при кодировании — дуга прогресса. */
 class RingView(ctx: Context) : View(ctx) {
     private val d = ctx.resources.displayMetrics.density
-    private val sw = 12 * d
+    private val sw = 7 * d
     private val lime = 0xFFD4FF3A.toInt()
     private val rect = RectF()
     private var shown = 0f
@@ -27,7 +27,7 @@ class RingView(ctx: Context) : View(ctx) {
         style = Paint.Style.STROKE; strokeWidth = sw; color = lime; strokeCap = Paint.Cap.ROUND
     }
     private val dots = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 5 * d; color = 0x99D4FF3A.toInt(); strokeCap = Paint.Cap.ROUND
+        style = Paint.Style.STROKE; strokeWidth = 3.5f * d; color = 0x99D4FF3A.toInt(); strokeCap = Paint.Cap.ROUND
     }
     private val spin = ValueAnimator.ofFloat(0f, 1f).apply {
         duration = 14000; repeatCount = ValueAnimator.INFINITE; interpolator = LinearInterpolator()
@@ -55,7 +55,7 @@ class RingView(ctx: Context) : View(ctx) {
         val half = sw / 2 + 2 * d
         rect.set(half, half, w - half, h - half)
         val r = rect.width() / 2
-        val gap = (2 * Math.PI.toFloat() * r) / 56f
+        val gap = (2 * Math.PI.toFloat() * r) / 44f
         dots.pathEffect = DashPathEffect(floatArrayOf(0.1f, gap), 0f)
     }
 
